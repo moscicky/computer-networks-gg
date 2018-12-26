@@ -155,12 +155,19 @@ void *handleRequest(void *t_data) {
             usersFdsMap[username] = client_fd;
             user_registered = true;
         } else {
-            read(client_fd, msg, sizeof(msg));
-            msg_data* msg_data1 = decodeMsg(msg);
-            std::string message = prepareMsg(username, msg_data1->msg);
-            write(msg_data1->fd, message.c_str(), message.size());
+            int read_result = static_cast<int>(read(client_fd, msg, sizeof(msg)));
+            if (read_result < 1) {
+                user_active = false;
+                broadcastUserLeft(username);
+            } else {
+                msg_data* msg_data1 = decodeMsg(msg);
+                std::string message = prepareMsg(username, msg_data1->msg);
+                write(msg_data1->fd, message.c_str(), message.size());
+            }
         }
     }
+
+    return nullptr;
 }
 
 void handleConnection(int client_socket_descriptor) {
