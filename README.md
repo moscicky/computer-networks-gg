@@ -19,6 +19,7 @@ Server:
 1. ```cd gg-server```
 2. ```g++ -pthread main.cpp -o server```
 3. ```./server [port] [adres]```
+
 **Note: -Wc++11-extensions used** 
 
 Test client:
