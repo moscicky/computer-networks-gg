@@ -17,7 +17,7 @@ Electron with React
 2. User sends his username.
 3. User receives list of available users ```500;user1;user2;...;```
 4. Other users receive new user's username ```200;new_user;```
-5. User sends message ```receiver;message```
+5. User sends message ```receiver;message;```
 6. User receives the message ```400;sender;message;```
-7. User quits, others receive ```300;user_that_left```
+7. User quits, others receive ```300;user_that_left;```
 
