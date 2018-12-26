@@ -22,7 +22,7 @@ Server:
 **Note: -Wc++11-extensions used** 
 
 Test client:
-nc [address] [port]
+```nc [address] [port]```
 
 
 
