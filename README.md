@@ -10,4 +10,4 @@ We've decided to implement simple chat web app.
 
 C/C++ with API BSD Sockets
 
-Electron eith React
+Electron with React
