@@ -12,12 +12,29 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
+#include <vector>
+#include <unordered_map>
+#include <stdlib.h>
 
 #define QUEUE_SIZE 5
+#define USERNAME_SIZE 256
+#define MSG_SIZE 256
 
 struct sockaddr_in server_address;
 int server_socket_descriptor;
+int connection_socket_descriptor;
 int reuse_addr_val = 1;
+std::vector<int> clientFds;
+std::unordered_map<std::string, int> usersFdsMap;
+
+struct client_thread_data {
+    int socket_fd;
+};
+
+struct msg_data {
+    int fd;
+    char* msg;
+};
 
 void createServerSocket(short serverPort, char* serverAddress) {
     memset(&server_address, 0, sizeof(struct sockaddr));
@@ -64,10 +81,73 @@ void listenOnSocket() {
     }
 }
 
+msg_data* decodeMsg(char* msg) {
+    auto *msg_data1 = new msg_data;
+    memset(msg_data1, 0, sizeof(msg_data));
+    char username[USERNAME_SIZE], msg_text[MSG_SIZE];
+    memset(&username, 0, sizeof(username));
+    memset(&msg_text, 0, sizeof(msg_text));
+    sscanf(msg, "%[^;];%[^;];\n", username, msg_text);
+    msg_data1->fd = usersFdsMap[username];
+    msg_data1->msg = msg_text;
+    return msg_data1;
+}
+
+void *handleRequest(void *t_data)
+{
+    pthread_detach(pthread_self());
+    auto th_data = (struct client_thread_data*)t_data;
+    int client_fd = th_data->socket_fd;
+    bool user_registered = false, user_active = true;
+    char username[USERNAME_SIZE], msg[MSG_SIZE];
+    memset(&username, 0, sizeof(username));
+    memset(&msg, 0, sizeof(msg));
+
+    while (user_active) {
+        if (!user_registered) {
+            read(client_fd, username, sizeof(username));
+            username[strlen(username) - 1] = '\0';
+            usersFdsMap[username] = client_fd;
+            user_registered = true;
+        } else {
+            read(client_fd, msg, sizeof(msg));
+            msg_data* msg_data1 = decodeMsg(msg);
+            write(msg_data1->fd, msg_data1->msg, MSG_SIZE);
+        }
+    }
+}
+
+void handleConnection(int client_socket_descriptor) {
+    clientFds.push_back(client_socket_descriptor);
+    pthread_t thread1;
+    auto *client_data = new client_thread_data;
+    memset(client_data, 0, sizeof(client_thread_data));
+    client_data->socket_fd = client_socket_descriptor;
+
+    int create_result = pthread_create(&thread1, nullptr, handleRequest, (void *)client_data);
+    if (create_result){
+        printf("Error creating thread for handling requests %s\n", strerror(errno));
+        exit(-1);
+    }
+}
+
 int main(int argc, char* argv[]) {
     createServerSocket(static_cast<short>(std::stoi(argv[1])), argv[2]);
     reuseServerSocket();
     bindAddrToSocket(argv[2]);
     listenOnSocket();
+
+    while(1) {
+        connection_socket_descriptor = accept(server_socket_descriptor, nullptr, nullptr);
+        if (connection_socket_descriptor < 0) {
+            printf("Error connecting new client %s\n", strerror(errno));
+            exit(1);
+        } else {
+            printf("%s%d\n", "New client connected with fd: ", connection_socket_descriptor);
+        }
+
+        handleConnection(connection_socket_descriptor);
+    }
+
     return 0;
 }
