@@ -103,7 +103,7 @@ msg_data* decodeMsg(char* msg) {
 
 void broadcastNewUser(char *username, int fd) {
     std::string name(username);
-    std::string new_user_msg = std::to_string(NEW_USER_CODE) + ";" + name + ";\n";
+    std::string new_user_msg = std::to_string(NEW_USER_CODE) + ";" + name + ";";
     std::string users_list = std::to_string(USERS_LIST_CODE) + ";";
 
     for (int i = 0; i < clientFds.size(); i++) {
@@ -115,14 +115,14 @@ void broadcastNewUser(char *username, int fd) {
     for (auto& it: usersFdsMap) {
         users_list += (it.first + ";");
     }
-    users_list += "\n";
+//    users_list += "\n";
 
     write(fd, users_list.c_str(), users_list.size());
 }
 
 void broadcastUserLeft(char *username) {
     std::string name(username);
-    std::string new_user_msg = std::to_string(USER_LEFT_CODE) + ";" + name + ";\n";
+    std::string new_user_msg = std::to_string(USER_LEFT_CODE) + ";" + name + ";";
 
     for (int i = 0; i < clientFds.size(); i++) {
         write(clientFds.at(static_cast<unsigned long>(i)), new_user_msg.c_str(), new_user_msg.size());
