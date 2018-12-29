@@ -17,7 +17,7 @@ Electron with React
 
 Server:
 1. ```cd gg-server```
-2. ```g++ -pthread main.cpp -o server```
+2. ```g++ -pthread main.cpp -o server -std=c++11```
 3. ```./server [port] [adres]```
 
 **Note: -Wc++11-extensions used** 
