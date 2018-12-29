@@ -96,6 +96,7 @@ msg_data* decodeMsg(char* msg) {
     sscanf(msg, "%[^;];%[^;];\n", username, msg_text);
     msg_text[strlen(msg_text)] = '\n';
     msg_data1->fd = usersFdsMap[username];
+    memset(msg_data1->msg, 0, sizeof(msg_data1->msg));
     strcpy(msg_data1->sender, username);
     strcpy(msg_data1->msg, msg_text);
     return msg_data1;
