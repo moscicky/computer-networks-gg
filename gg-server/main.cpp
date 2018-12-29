@@ -150,7 +150,7 @@ void *handleRequest(void *t_data) {
     while (user_active) {
         if (!user_registered) {
             read(client_fd, username, sizeof(username));
-            username[strlen(username) - 1] = '\0';
+//            username[strlen(username) - 1] = '\0';
             broadcastNewUser(username, client_fd);
             usersFdsMap[username] = client_fd;
             user_registered = true;
@@ -167,6 +167,7 @@ void *handleRequest(void *t_data) {
         }
     }
 
+    pthread_exit(nullptr);
     return nullptr;
 }
 
