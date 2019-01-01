@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <stdlib.h>
 #include <algorithm>
+#include <signal.h>
 
 #define QUEUE_SIZE 5
 #define USERNAME_SIZE 256
@@ -24,6 +25,9 @@
 #define USER_LEFT_CODE 300
 #define NEW_MSG_CODE 400
 #define USERS_LIST_CODE 500
+#define SERVER_TERMINATED 600
+
+bool serverAlive;
 
 struct sockaddr_in server_address;
 int server_socket_descriptor;
@@ -35,7 +39,6 @@ std::unordered_map<int, pthread_mutex_t> userMutexMap;
 
 pthread_mutex_t clientFdsMutex;
 pthread_mutex_t usersFdsMapMutex;
-
 
 struct client_thread_data {
     int socket_fd;
@@ -286,16 +289,37 @@ void handleConnection(int client_socket_descriptor) {
     }
 }
 
+void terminationHandler(int boilerplate) {
+    std::string term_msg = std::to_string(SERVER_TERMINATED) + ";";
+
+    pthread_mutex_lock(&clientFdsMutex);
+
+    for (int i = 0; i < clientFds.size(); i++) {
+        auto index = static_cast<unsigned long>(i);
+        pthread_mutex_lock(&userMutexMap[clientFds.at(index)]);
+        write(clientFds.at(index), term_msg.c_str(), term_msg.size());
+        pthread_mutex_unlock(&userMutexMap[clientFds.at(index)]);
+    }
+
+    pthread_mutex_unlock(&clientFdsMutex);
+    serverAlive = false;
+    exit(0);
+}
+
+void initLocks() {
+    clientFdsMutex = PTHREAD_MUTEX_INITIALIZER;
+    usersFdsMapMutex = PTHREAD_MUTEX_INITIALIZER;
+}
 int main(int argc, char* argv[]) {
+    serverAlive = true;
+    initLocks();
     createServerSocket(static_cast<short>(std::stoi(argv[1])), argv[2]);
     reuseServerSocket();
     bindAddrToSocket(argv[2]);
     listenOnSocket();
+    signal(SIGINT, terminationHandler);
 
-    clientFdsMutex = PTHREAD_MUTEX_INITIALIZER;
-    usersFdsMapMutex = PTHREAD_MUTEX_INITIALIZER;
-
-    while(1) {
+    while(serverAlive) {
         connection_socket_descriptor = accept(server_socket_descriptor, nullptr, nullptr);
         if (connection_socket_descriptor < 0) {
             printf("Error connecting new client %s\n", strerror(errno));
