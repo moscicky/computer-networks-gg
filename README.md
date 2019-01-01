@@ -38,6 +38,8 @@ Test client:
 
 # Sprawozdanie
 
+**Repozytorium klienta dostępne [tutaj](https://github.com/szczupag/electron-react-client-for-chat-app)**
+
 ## Opis protokołu
 
 * Uruchamiając serwer specyfikujemy jego port i adres. 
