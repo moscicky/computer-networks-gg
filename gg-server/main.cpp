@@ -30,6 +30,7 @@ int connection_socket_descriptor;
 int reuse_addr_val = 1;
 std::vector<int> clientFds;
 std::unordered_map<std::string, int> usersFdsMap;
+std::unordered_map<int, pthread_mutex_t> userMutexMap;
 
 struct client_thread_data {
     int socket_fd;
@@ -42,6 +43,11 @@ struct msg_data {
     char msg[256];
 };
 
+/**
+ * Creates server socket
+ * @param serverPort
+ * @param serverAddress
+ */
 void createServerSocket(short serverPort, char* serverAddress) {
     memset(&server_address, 0, sizeof(struct sockaddr));
     server_address.sin_family = AF_INET;
@@ -58,6 +64,9 @@ void createServerSocket(short serverPort, char* serverAddress) {
     }
 }
 
+/**
+ * Helps with reusing sockets of previous server instances
+ */
 void reuseServerSocket() {
      int sock_reuse = setsockopt(server_socket_descriptor, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr_val, sizeof(reuse_addr_val));
      if (sock_reuse < 0) {
@@ -67,6 +76,10 @@ void reuseServerSocket() {
      }
 }
 
+/**
+ * Binds given address to socket
+ * @param serverAddress
+ */
 void bindAddrToSocket(char* serverAddress) {
     int bind_result = bind(server_socket_descriptor, (struct sockaddr*)&server_address, sizeof(struct sockaddr));
     if (bind_result < 0) {
@@ -77,6 +90,9 @@ void bindAddrToSocket(char* serverAddress) {
     }
 }
 
+/**
+ * Makes server listen on socket
+ */
 void listenOnSocket() {
     int listen_result = listen(server_socket_descriptor, QUEUE_SIZE);
     if (listen_result < 0) {
@@ -87,6 +103,11 @@ void listenOnSocket() {
     }
 }
 
+/**
+ * Decodes raw message
+ * @param msg
+ * @return
+ */
 msg_data* decodeMsg(char* msg) {
     auto *msg_data1 = new msg_data;
     memset(msg_data1, 0, sizeof(msg_data));
@@ -95,6 +116,7 @@ msg_data* decodeMsg(char* msg) {
     memset(&msg_text, 0, sizeof(msg_text));
     sscanf(msg, "%[^;];%[^;];\n", username, msg_text);
     msg_text[strlen(msg_text)] = '\n';
+
     msg_data1->fd = usersFdsMap[username];
     memset(msg_data1->msg, 0, sizeof(msg_data1->msg));
     strcpy(msg_data1->sender, username);
@@ -102,6 +124,11 @@ msg_data* decodeMsg(char* msg) {
     return msg_data1;
 }
 
+/**
+ * Broadcasts new user other users
+ * @param username
+ * @param fd
+ */
 void broadcastNewUser(char *username, int fd) {
     std::string name(username);
     std::string new_user_msg = std::to_string(NEW_USER_CODE) + ";" + name + ";";
@@ -116,11 +143,14 @@ void broadcastNewUser(char *username, int fd) {
     for (auto& it: usersFdsMap) {
         users_list += (it.first + ";");
     }
-//    users_list += "\n";
 
     write(fd, users_list.c_str(), users_list.size());
 }
 
+/**
+ * Broadcasts info about user who left
+ * @param username of the user who left
+ */
 void broadcastUserLeft(char *username) {
     std::string name(username);
     std::string new_user_msg = std::to_string(USER_LEFT_CODE) + ";" + name + ";";
@@ -139,6 +169,36 @@ std::string prepareMsg(char *sender, char *msg) {
     return new_msg;
 }
 
+/**
+ * Broadcasts new user to other users, initializes it's mutex/
+ * @param client_fd new user socket file descriptor id
+ * @param username name of the new user
+ */
+void handleNewUser(int client_fd, char* username) {
+    broadcastNewUser(username, client_fd);
+    usersFdsMap[username] = client_fd;
+    userMutexMap[client_fd] = PTHREAD_MUTEX_INITIALIZER;
+}
+
+/**
+ * Decodes raw msg and sends it to decoded client
+ * @param raw_msg
+ * @param sender
+ */
+void handleNewMsg(char* raw_msg, char* sender) {
+    msg_data* msg_info = decodeMsg(raw_msg);
+    std::string message = prepareMsg(sender, msg_info->msg);
+
+    pthread_mutex_lock(&userMutexMap[msg_info->fd]);
+    write(msg_info->fd, message.c_str(), message.size());
+    pthread_mutex_unlock(&userMutexMap[msg_info->fd]);
+}
+
+/**
+ * Handles one client requests - decodes it's messages and sends them to other clients
+ * @param t_data client's file descriptor
+ * @return
+ */
 void *handleRequest(void *t_data) {
     pthread_detach(pthread_self());
     auto th_data = (struct client_thread_data*)t_data;
@@ -151,19 +211,16 @@ void *handleRequest(void *t_data) {
     while (user_active) {
         if (!user_registered) {
             read(client_fd, username, sizeof(username));
-//            username[strlen(username) - 1] = '\0';
-            broadcastNewUser(username, client_fd);
-            usersFdsMap[username] = client_fd;
+            handleNewUser(client_fd, username);
             user_registered = true;
         } else {
             int read_result = static_cast<int>(read(client_fd, msg, sizeof(msg)));
+
             if (read_result < 1) {
                 user_active = false;
                 broadcastUserLeft(username);
             } else {
-                msg_data* msg_data1 = decodeMsg(msg);
-                std::string message = prepareMsg(username, msg_data1->msg);
-                write(msg_data1->fd, message.c_str(), message.size());
+                handleNewMsg(msg, username);
             }
         }
     }
@@ -172,6 +229,10 @@ void *handleRequest(void *t_data) {
     return nullptr;
 }
 
+/**
+ * Adds new client's socket fd to the vector of clients' fds and created thread responsible for handling client requests
+ * @param client_socket_descriptor
+ */
 void handleConnection(int client_socket_descriptor) {
     clientFds.push_back(client_socket_descriptor);
     pthread_t thread1;
