@@ -15,6 +15,7 @@
 #include <vector>
 #include <unordered_map>
 #include <stdlib.h>
+#include <algorithm>
 
 #define QUEUE_SIZE 5
 #define USERNAME_SIZE 256
@@ -31,6 +32,10 @@ int reuse_addr_val = 1;
 std::vector<int> clientFds;
 std::unordered_map<std::string, int> usersFdsMap;
 std::unordered_map<int, pthread_mutex_t> userMutexMap;
+
+pthread_mutex_t clientFdsMutex;
+pthread_mutex_t usersFdsMapMutex;
+
 
 struct client_thread_data {
     int socket_fd;
@@ -134,32 +139,60 @@ void broadcastNewUser(char *username, int fd) {
     std::string new_user_msg = std::to_string(NEW_USER_CODE) + ";" + name + ";";
     std::string users_list = std::to_string(USERS_LIST_CODE) + ";";
 
+
+    pthread_mutex_lock(&clientFdsMutex);
     for (int i = 0; i < clientFds.size(); i++) {
-        if (clientFds.at(static_cast<unsigned long>(i)) != fd) {
-            write(clientFds.at(static_cast<unsigned long>(i)), new_user_msg.c_str(), new_user_msg.size());
+        auto index = static_cast<unsigned long>(i);
+
+        if (clientFds.at(index) != fd) {
+            pthread_mutex_lock(&userMutexMap[clientFds.at(index)]);
+            write(clientFds.at(index), new_user_msg.c_str(), new_user_msg.size());
+            pthread_mutex_unlock(&userMutexMap[clientFds.at(index)]);
         }
     }
+    pthread_mutex_unlock(&clientFdsMutex);
 
+    pthread_mutex_lock(&usersFdsMapMutex);
     for (auto& it: usersFdsMap) {
         users_list += (it.first + ";");
     }
+    pthread_mutex_unlock(&usersFdsMapMutex);
 
+    pthread_mutex_lock(&userMutexMap[fd]);
     write(fd, users_list.c_str(), users_list.size());
+    pthread_mutex_unlock(&userMutexMap[fd]);
 }
 
 /**
  * Broadcasts info about user who left
  * @param username of the user who left
  */
-void broadcastUserLeft(char *username) {
+void broadcastUserLeft(char *username, int client_fd) {
     std::string name(username);
     std::string new_user_msg = std::to_string(USER_LEFT_CODE) + ";" + name + ";";
 
+    pthread_mutex_lock(&clientFdsMutex);
+    clientFds.erase(std::remove(clientFds.begin(), clientFds.end(), client_fd), clientFds.end());
+
     for (int i = 0; i < clientFds.size(); i++) {
-        write(clientFds.at(static_cast<unsigned long>(i)), new_user_msg.c_str(), new_user_msg.size());
+        auto index = static_cast<unsigned long>(i);
+        pthread_mutex_lock(&userMutexMap[clientFds.at(index)]);
+        write(clientFds.at(index), new_user_msg.c_str(), new_user_msg.size());
+        pthread_mutex_unlock(&userMutexMap[clientFds.at(index)]);
     }
+    pthread_mutex_unlock(&clientFdsMutex);
+
+    pthread_mutex_lock(&usersFdsMapMutex);
+    usersFdsMap.erase(name);
+    pthread_mutex_unlock(&usersFdsMapMutex);
 }
 
+/**
+ * Prepares msg to the form understandable by the server
+ * @param sender
+ * @param msg
+ * @return
+ */
 std::string prepareMsg(char *sender, char *msg) {
     msg[strlen(msg) - 1] = '\0';
     std::string sender_name(sender);
@@ -175,9 +208,12 @@ std::string prepareMsg(char *sender, char *msg) {
  * @param username name of the new user
  */
 void handleNewUser(int client_fd, char* username) {
-    broadcastNewUser(username, client_fd);
-    usersFdsMap[username] = client_fd;
     userMutexMap[client_fd] = PTHREAD_MUTEX_INITIALIZER;
+    broadcastNewUser(username, client_fd);
+
+    pthread_mutex_lock(&usersFdsMapMutex);
+    usersFdsMap[username] = client_fd;
+    pthread_mutex_unlock(&usersFdsMapMutex);
 }
 
 /**
@@ -218,7 +254,7 @@ void *handleRequest(void *t_data) {
 
             if (read_result < 1) {
                 user_active = false;
-                broadcastUserLeft(username);
+                broadcastUserLeft(username, client_fd);
             } else {
                 handleNewMsg(msg, username);
             }
@@ -234,7 +270,10 @@ void *handleRequest(void *t_data) {
  * @param client_socket_descriptor
  */
 void handleConnection(int client_socket_descriptor) {
+    pthread_mutex_lock(&clientFdsMutex);
     clientFds.push_back(client_socket_descriptor);
+    pthread_mutex_unlock(&clientFdsMutex);
+
     pthread_t thread1;
     auto *client_data = new client_thread_data;
     memset(client_data, 0, sizeof(client_thread_data));
@@ -253,6 +292,9 @@ int main(int argc, char* argv[]) {
     bindAddrToSocket(argv[2]);
     listenOnSocket();
 
+    clientFdsMutex = PTHREAD_MUTEX_INITIALIZER;
+    usersFdsMapMutex = PTHREAD_MUTEX_INITIALIZER;
+
     while(1) {
         connection_socket_descriptor = accept(server_socket_descriptor, nullptr, nullptr);
         if (connection_socket_descriptor < 0) {
@@ -264,6 +306,5 @@ int main(int argc, char* argv[]) {
 
         handleConnection(connection_socket_descriptor);
     }
-
     return 0;
 }
