@@ -33,6 +33,8 @@ struct sockaddr_in server_address;
 int server_socket_descriptor;
 int connection_socket_descriptor;
 int reuse_addr_val = 1;
+struct addrinfo hints, *res, *p;
+char ipstr[30];
 std::vector<int> clientFds;
 std::unordered_map<std::string, int> usersFdsMap;
 std::unordered_map<int, pthread_mutex_t> userMutexMap;
@@ -51,24 +53,51 @@ struct msg_data {
     char msg[256];
 };
 
+
+/**
+ * Set server address and port
+ * @param name
+ * @param port
+ */
+void setServerAddress(int argc, char* argv[]) {
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    int get_addr;
+
+    if(argc == 3) {
+        get_addr = getaddrinfo(argv[1], argv[2], &hints, &res);
+    } else {
+        get_addr = getaddrinfo(argv[1], nullptr, &hints, &res);
+    }
+
+    if (get_addr != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(get_addr));
+        exit(1);
+    }
+
+    for(p = res;p != nullptr; p = p->ai_next) {
+        server_address = *(struct sockaddr_in *)p->ai_addr;
+        inet_ntop(p->ai_family, &(server_address.sin_addr), ipstr, sizeof ipstr);
+        printf("Requested server IP: %s\n", ipstr);
+    }
+
+    freeaddrinfo(res);
+}
+
 /**
  * Creates server socket
  * @param serverPort
  * @param serverAddress
  */
-void createServerSocket(short serverPort, char* serverAddress) {
-    memset(&server_address, 0, sizeof(struct sockaddr));
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(serverPort);
-    inet_pton(AF_INET, serverAddress, &(server_address.sin_addr.s_addr));
-
+void createServerSocket() {
     server_socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socket_descriptor < 0) {
         printf("Error creating server socket %s\n", strerror(errno));
         exit(1);
     } else {
-        printf("%s%d%s%d\n", "Created socket server at port ", serverPort, ". File descriptor: ", server_socket_descriptor);
+        printf("%s%d\n", "Created server socket. File descriptor: ", server_socket_descriptor);
     }
 }
 
@@ -94,7 +123,7 @@ void bindAddrToSocket(char* serverAddress) {
         printf("Error binding address to server socket %s\n", strerror(errno));
         exit(1);
     } else {
-        printf("%s%s%s\n", "Address ", serverAddress, " bind to server socket");
+        printf("%s%s%s%s%s\n", "Address ", ipstr, ":", serverAddress, " bind to server socket");
     }
 }
 
@@ -303,17 +332,19 @@ void terminationHandler(int boilerplate) {
 
     pthread_mutex_unlock(&clientFdsMutex);
     serverAlive = false;
-    exit(0);
+    exit(1);
 }
 
 void initLocks() {
     clientFdsMutex = PTHREAD_MUTEX_INITIALIZER;
     usersFdsMapMutex = PTHREAD_MUTEX_INITIALIZER;
 }
+
 int main(int argc, char* argv[]) {
     serverAlive = true;
     initLocks();
-    createServerSocket(static_cast<short>(std::stoi(argv[1])), argv[2]);
+    setServerAddress(argc, argv);
+    createServerSocket();
     reuseServerSocket();
     bindAddrToSocket(argv[2]);
     listenOnSocket();
