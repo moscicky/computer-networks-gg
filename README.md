@@ -70,7 +70,7 @@ Serwer:
 1. ```git clone https://github.com/moscicky/computer-networks-gg```
 2. ```cd gg-server```
 3. ```g++ -pthread main.cpp -o server -std=c++11 -Wall```
-4. ```./server [port] [adres]``` (np. ```./server 1234 127.0.0.1```)
+4. ```./server adres|nazwa_domenowa [port]``` (np. ```./server 127.0.0.1 1234 lub ./server onet.pl```)
 
 **Uwaga: użyto rozszerzeń -Wc++11-extensions** 
 
