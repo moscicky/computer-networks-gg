@@ -38,9 +38,9 @@ Test client:
 
 # Sprawozdanie
 
-**Demo oraz uruchomienie - [film](https://www.youtube.com/watch?v=p9TObVBzun8)** 
+**Demo oraz uruchomienie: [film](https://www.youtube.com/watch?v=LyKtO-P7hOo)** 
 
-**Repozytorium klienta dostępne [tutaj](https://github.com/szczupag/electron-react-client-for-chat-app)**
+**Repozytorium klienta dostępne: [tutaj](https://github.com/szczupag/electron-react-client-for-chat-app)**
 
 ## Opis protokołu
 
