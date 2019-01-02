@@ -59,18 +59,12 @@ struct msg_data {
  * @param name
  * @param port
  */
-void setServerAddress(int argc, char* argv[]) {
+void setServerAddress(char* name, char* port) {
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    int get_addr;
 
-    if(argc == 3) {
-        get_addr = getaddrinfo(argv[1], argv[2], &hints, &res);
-    } else {
-        get_addr = getaddrinfo(argv[1], nullptr, &hints, &res);
-    }
-
+    int get_addr = getaddrinfo(name, port, &hints, &res);
     if (get_addr != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(get_addr));
         exit(1);
@@ -343,7 +337,7 @@ void initLocks() {
 int main(int argc, char* argv[]) {
     serverAlive = true;
     initLocks();
-    setServerAddress(argc, argv);
+    setServerAddress(argv[1], argv[2]);
     createServerSocket();
     reuseServerSocket();
     bindAddrToSocket(argv[2]);
