@@ -50,6 +50,7 @@ Test client:
 * Klient wysyła wiadomość: ```adresat;wiadomosc;```
 * Klient otrzymuje wiadomość: ```400;nadawca;wiadomosc;```
 * Klient wychodzi, reszta klientów otrzymuje informację: ```300;odlaczony_uzytkownik;```
+* Wyłączono serwer ```600;```
 
 ## Struktury projektu
 
